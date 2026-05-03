@@ -3,106 +3,59 @@ dashboard/app.py
 ----------------
 Main Streamlit interface for the soft-cuda Custom C++ Deep Learning Engine.
 
-Provides two operational modes:
-  1. Live Brain   -- Real-time training loop visualizer with epoch-level metrics.
+Provides three operational modes:
+  1. Live Brain        -- Real-time training loop visualizer with epoch-level metrics.
   2. Hardware Inference -- Target hardware FPS prediction using trained weights.
+  3. Engine Benchmarks -- Performance telemetry and developer experience showcase.
+
+All metrics are sourced from the real C++ tensor engine backends.
 """
+
+import sys
+import os
+import math
+
+# ---------------------------------------------------------------------------
+# Path setup: ensure the project root and files/ directory are importable
+# regardless of the working directory.
+# ---------------------------------------------------------------------------
+_DASHBOARD_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.abspath(os.path.join(_DASHBOARD_DIR, ".."))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 import streamlit as st
 import pandas as pd
-import time
-import random
 try:
     import plotly.graph_objects as go
     HAS_PLOTLY = True
 except ImportError:
     HAS_PLOTLY = False
-import math
 
 # ============================================================================
-# MOCK BACKEND GENERATORS (Replaces ctypes calls for UI Testing)
+# REAL BACKEND IMPORTS (C++ Tensor Engine)
 # ============================================================================
 
-def run_training_loop(epochs=500, base_loss=1.2):
-    """Generates mock training epoch data to simulate the C++ engine."""
-    current_loss = base_loss
-    for epoch in range(1, epochs + 1):
-        # Simulate C++ processing time (faster over time as weights settle)
-        time_ms = random.uniform(2.5, 5.0) - (epoch / epochs) * 1.5
-        
-        # Simulate loss curve with noise and asymptotic convergence
-        noise = random.uniform(-0.02, 0.02) * (1 - epoch/epochs)
-        current_loss = current_loss * 0.98 + noise
-        if current_loss < 0.01:
-            current_loss = 0.01 + random.uniform(0, 0.005)
-            
-        # Determine learning phase
-        if epoch < epochs * 0.3:
-            phase = 0
-        elif epoch < epochs * 0.8:
-            phase = 1
-        else:
-            phase = 2
-            
-        yield {
-            "epoch": epoch,
-            "loss": current_loss,
-            "time_ms": max(0.5, time_ms),
-            "learning_phase": phase,
-            "total_epochs": epochs,
-            "num_samples": 8500
-        }
-        time.sleep(0.01) # UI refresh rate
+from core_training import (
+    run_training_loop,
+    POOL_SIZE,
+    META_POOL_SIZE,
+    GRAD_POOL_SIZE,
+    LR,
+    HIDDEN_DIM,
+)
+import files.predict as predict_module
+from files.predict import get_prediction_report, get_game_list, search_games
 
-def load_game_requirements(db_path):
-    """Mock game requirements database."""
-    return [
-        {"id": "cs2", "display_name": "Counter-Strike 2", "min_cpu": 2.8, "min_ram": 8, "min_vram": 2, "rec_cpu": 3.6, "rec_ram": 16, "rec_vram": 8},
-        {"id": "cyberpunk", "display_name": "Cyberpunk 2077", "min_cpu": 3.2, "min_ram": 12, "min_vram": 6, "rec_cpu": 4.0, "rec_ram": 16, "rec_vram": 12},
-        {"id": "valorant", "display_name": "Valorant", "min_cpu": 2.5, "min_ram": 4, "min_vram": 1, "rec_cpu": 3.2, "rec_ram": 8, "rec_vram": 4},
-        {"id": "gta5", "display_name": "Grand Theft Auto V", "min_cpu": 2.4, "min_ram": 4, "min_vram": 1, "rec_cpu": 3.2, "rec_ram": 8, "rec_vram": 4},
-        {"id": "fortnite", "display_name": "Fortnite", "min_cpu": 2.8, "min_ram": 8, "min_vram": 2, "rec_cpu": 3.5, "rec_ram": 16, "rec_vram": 8},
-    ]
+# Compute derived constants for the System Diagnostics cards.
+_TOTAL_MEMORY_MB = (POOL_SIZE + META_POOL_SIZE + GRAD_POOL_SIZE) // (1024 * 1024)
+_POOL_MB = POOL_SIZE // (1024 * 1024)
+_META_MB = META_POOL_SIZE // (1024 * 1024)
+_GRAD_MB = GRAD_POOL_SIZE // (1024 * 1024)
 
-def search_games(query, db, max_results=5):
-    """Filter mock database by query string."""
-    q = query.lower()
-    results = [g for g in db if q in g["display_name"].lower()]
-    return results[:max_results]
-
-def get_prediction_report(cpu_ghz, ram_gb, vram_gb, game_name):
-    """Mocks the C++ inference forward pass."""
-    db = load_game_requirements(None)
-    game = next((g for g in db if g["display_name"] == game_name), db[0])
-    
-    # Fake simple FPS logic
-    base_fps = 90
-    fps = base_fps * (cpu_ghz / game["rec_cpu"]) * (min(ram_gb, game["rec_ram"]) / game["rec_ram"])
-    fps = max(15.0, fps)
-    
-    verdict = "PLAYABLE"
-    if fps >= 120: verdict = "COMPETITIVE / ESPORTS READY"
-    elif fps >= 60: verdict = "SMOOTH"
-    elif fps < 30: verdict = "UNPLAYABLE"
-    
-    bottlenecks = []
-    if cpu_ghz < game["rec_cpu"]: bottlenecks.append(f"CPU Clock: {cpu_ghz:.1f} GHz is below recommended {game['rec_cpu']:.1f} GHz")
-    if ram_gb < game["rec_ram"]: bottlenecks.append(f"System RAM: {ram_gb:.0f} GB is below recommended {game['rec_ram']:.0f} GB")
-    
-    return {
-        "game": game,
-        "predicted_fps": fps,
-        "error_margin": 5.2,
-        "fps_low": fps - 5.2,
-        "fps_high": fps + 5.2,
-        "verdict_label": verdict,
-        "verdict_detail": "Performance estimate based on mocked engine",
-        "bottlenecks": bottlenecks,
-        "num_samples": 8500,
-        "inference_ms": random.uniform(0.1, 0.5),
-    }
-
-_predict_game_db = load_game_requirements(None)
+# Eagerly load the game database and model weights at startup so that
+# Tab 2 has instant access to the 7,800+ title CSV.
+predict_module._ensure_loaded()
 
 # ============================================================================
 # Page Configuration
@@ -711,22 +664,26 @@ if app_mode == "Live Brain":
     
     sys_col1, sys_col2, sys_col3 = st.columns(3, gap="large")
 
+    # Compute dynamic topology values from imported constants.
+    _num_features = 9  # Matches fps_data.csv column count (user_cpu, user_ram, user_vram, min_*, rec_*)
+    _trainable_params = _num_features * HIDDEN_DIM + HIDDEN_DIM * 1
+
     with sys_col1:
         # [SYS] Model Topology
         st.markdown(
             '<div class="cyber-card sys-card">'
             '<div class="card-title">[SYS] Model Topology</div>'
-            '<span class="cl">Input Features</span>  '
-            '<span class="cv-accent">9</span><br>'
-            '<span class="cl">Hidden Layers</span>  '
-            '<span class="cv">1 (16 neurons, ReLU)</span><br>'
+            f'<span class="cl">Input Features</span>  '
+            f'<span class="cv-accent">{_num_features}</span><br>'
+            f'<span class="cl">Hidden Layers</span>  '
+            f'<span class="cv">1 ({HIDDEN_DIM} neurons, ReLU)</span><br>'
             '<span class="cl">Output Layer</span>  '
             '<span class="cv">1 (Linear)</span><br>'
             '<span class="cl">Biases</span>  '
             '<span class="cv">Disabled (engine workaround)</span><br>'
             '<span class="cl">Trainable Params</span>  '
-            '<span class="cv-accent">160</span> '
-            '<span class="cl">(W1: 9x16, W2: 16x1)</span>'
+            f'<span class="cv-accent">{_trainable_params}</span> '
+            f'<span class="cl">(W1: {_num_features}x{HIDDEN_DIM}, W2: {HIDDEN_DIM}x1)</span>'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -741,7 +698,7 @@ if app_mode == "Live Brain":
             '<span class="cl">Optimizer</span>  '
             '<span class="cv">Full-Batch Gradient Descent</span><br>'
             '<span class="cl">Learning Rate</span>  '
-            '<span class="cv-accent">0.05</span><br>'
+            f'<span class="cv-accent">{LR}</span><br>'
             '<span class="cl">Epochs</span>  '
             '<span class="cv-accent">500</span>'
             '</div>',
@@ -756,8 +713,8 @@ if app_mode == "Live Brain":
             '<span class="cl">Backend</span>  '
             '<span class="cv">SCBackend.CPU (Custom C++)</span><br>'
             '<span class="cl">Total Allocated</span>  '
-            '<span class="cv-accent">110 MB</span> '
-            '<span class="cl">(50 Pool + 10 Meta + 50 Grad)</span><br>'
+            f'<span class="cv-accent">{_TOTAL_MEMORY_MB} MB</span> '
+            f'<span class="cl">({_POOL_MB} Pool + {_META_MB} Meta + {_GRAD_MB} Grad)</span><br>'
             '<span class="cl">Precision</span>  '
             '<span class="cv">FP32</span>'
             '</div>',
@@ -843,10 +800,12 @@ elif app_mode == "Hardware Inference":
             value="", key="game_query",
         )
 
-        # Dynamic search results
+        # Dynamic search results (using real 7,800+ game CSV database)
         selected_game = None
         if game_query.strip():
-            matches = search_games(game_query, _predict_game_db, max_results=10)
+            matches = search_games(
+                game_query, predict_module._game_db_cache, max_results=10
+            )
             if not matches:
                 st.warning("[INFO] No games found matching that query. Try a different name.")
             elif len(matches) == 1:
