@@ -170,11 +170,8 @@ st.markdown(
             border-right: 1px solid rgba(203, 166, 247, 0.3);
         }
         [data-testid="stSidebar"] .stRadio > div {
-            background: rgba(0, 0, 0, 0.4);
-            padding: 1.5rem 1rem;
-            border-radius: 0px;
-            border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: inset 0 0 15px rgba(0,0,0,0.8);
+            padding: 0.5rem 0.5rem;
+            background: transparent;
         }
         [data-testid="stSidebar"] .stRadio label {
             color: #ffffff !important;
@@ -281,6 +278,9 @@ st.markdown(
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(203, 166, 247, 0.1);
             margin-bottom: 1rem;
             transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .sys-card {
+            height: 310px;
         }
         .cyber-card:hover {
             transform: translateY(-6px) scale(1.02);
@@ -666,7 +666,7 @@ elif app_mode == "Hardware Inference":
     banner_sub = "Single-shot FPS prediction using your hardware specifications and the trained neural engine."
 else:
     banner_title = "Engine Benchmarks"
-    banner_sub = "Performance telemetry and developer experience showcase for the CodeVerse C++ inference engine."
+    banner_sub = "Performance telemetry and developer experience showcase for the soft-cuda C++ inference engine."
 
 st.markdown(
     f'''
@@ -714,7 +714,7 @@ if app_mode == "Live Brain":
     with sys_col1:
         # [SYS] Model Topology
         st.markdown(
-            '<div class="cyber-card">'
+            '<div class="cyber-card sys-card">'
             '<div class="card-title">[SYS] Model Topology</div>'
             '<span class="cl">Input Features</span>  '
             '<span class="cv-accent">9</span><br>'
@@ -734,7 +734,7 @@ if app_mode == "Live Brain":
     with sys_col2:
         # [NET] Execution & Hyperparameters
         st.markdown(
-            '<div class="cyber-card">'
+            '<div class="cyber-card sys-card">'
             '<div class="card-title">[NET] Execution</div>'
             '<span class="cl">Loss Function</span>  '
             '<span class="cv">SC_MSE (C-API bypass)</span><br>'
@@ -751,7 +751,7 @@ if app_mode == "Live Brain":
     with sys_col3:
         # [OPS] Engine Memory & Graph
         st.markdown(
-            '<div class="cyber-card">'
+            '<div class="cyber-card sys-card">'
             '<div class="card-title">[OPS] Engine Memory</div>'
             '<span class="cl">Backend</span>  '
             '<span class="cv">SCBackend.CPU (Custom C++)</span><br>'
@@ -1013,7 +1013,7 @@ elif app_mode == "Engine Benchmarks":
     st.markdown(
         '''
         <div class="bench-hero">
-            <h1>CodeVerse // Benchmark Suite</h1>
+            <h1>soft-cuda // Benchmark Suite</h1>
             <div class="bench-subtitle">
                 Outperforming PyTorch via AOT-Optimized Hybrid Dispatch
                 and Zero-Overhead C++ Pooling.
@@ -1046,7 +1046,7 @@ elif app_mode == "Engine Benchmarks":
     with show_c2:
         st.markdown(
             '<div class="cyber-card">'
-            '<div class="card-title">[CV] CodeVerse (Hybrid)</div>'
+            '<div class="card-title">[CV] soft-cuda (Hybrid)</div>'
             '<div class="bench-stat-value" style="color: #10B981;">1.99 ms</div>'
             '<div class="bench-stat-label">per step</div>'
             '</div>',
@@ -1081,7 +1081,7 @@ elif app_mode == "Engine Benchmarks":
             x=matrix_sizes,
             y=cv_gpu,
             mode="lines+markers",
-            name="CodeVerse (GPU)",
+            name="soft-cuda (GPU)",
             line=dict(color="#10B981", width=3),
             marker=dict(size=8, symbol="diamond", color="#10B981",
                         line=dict(width=1, color="rgba(16,185,129,0.6)")),
@@ -1130,7 +1130,7 @@ elif app_mode == "Engine Benchmarks":
     else:
         chart_df = pd.DataFrame({
             "Matrix Size": matrix_sizes,
-            "CodeVerse (GPU)": cv_gpu,
+            "soft-cuda (GPU)": cv_gpu,
             "PyTorch (GPU)": pt_gpu,
         }).set_index("Matrix Size")
         st.line_chart(chart_df)
@@ -1139,7 +1139,7 @@ elif app_mode == "Engine Benchmarks":
         '<div class="cyber-card">'
         '<span class="cl">Analysis:</span>  '
         '<span class="cv">At peak load (4096x4096), direct cuBLAS hooks bypass '
-        'PyTorch\'s dispatcher (19.41ms vs 20.07ms).</span>'
+        "PyTorch's dispatcher (19.41ms vs 20.07ms).</span>"
         '</div>',
         unsafe_allow_html=True,
     )
@@ -1154,7 +1154,7 @@ elif app_mode == "Engine Benchmarks":
     with xor_c1:
         st.markdown(
             '<div class="cyber-card">'
-            '<div class="card-title">[CV] CodeVerse CPU</div>'
+            '<div class="card-title">[CV] soft-cuda CPU</div>'
             '<div class="bench-stat-value" style="color: #10B981;">302.30 ms</div>'
             '<div class="bench-stat-label">Full XOR Training</div>'
             '</div>',
@@ -1175,7 +1175,7 @@ elif app_mode == "Engine Benchmarks":
         '<div class="cyber-card">'
         '<span class="cl">Conclusion:</span>  '
         '<span class="cv">PyTorch suffers massive framework overhead on small graphs. '
-        'CodeVerse executes 40x faster by eliminating Python-level dispatching.</span>'
+        'soft-cuda executes 40x faster by eliminating Python-level dispatching.</span>'
         '</div>',
         unsafe_allow_html=True,
     )
